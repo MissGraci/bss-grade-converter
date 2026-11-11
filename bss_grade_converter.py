@@ -13,11 +13,11 @@ st.set_page_config(
 )
 
 # ============================================================
-# FAIXAS DE NOTAS BSS - SL - MAIO 2026 - TZ2
+# BOUNDARIES BSS - SL - MAY 2026 - TZ2
 # ============================================================
 
 LIMITES = {
-    "Prova 1": [
+    "Paper 1": [
         (0, 5, 1),
         (6, 11, 2),
         (12, 17, 3),
@@ -26,8 +26,7 @@ LIMITES = {
         (27, 31, 6),
         (32, 40, 7),
     ],
-
-    "Prova 2": [
+    "Paper 2": [
         (0, 5, 1),
         (6, 10, 2),
         (11, 14, 3),
@@ -36,8 +35,7 @@ LIMITES = {
         (22, 25, 6),
         (26, 30, 7),
     ],
-
-    "Avaliação interna (IA)": [
+    "Internal Assessment (IA)": [
         (0, 4, 1),
         (5, 8, 2),
         (9, 11, 3),
@@ -46,7 +44,6 @@ LIMITES = {
         (19, 22, 6),
         (23, 28, 7),
     ],
-
     "Nota final": [
         (0, 15, 1),
         (16, 30, 2),
@@ -63,9 +60,9 @@ LIMITES = {
 # ============================================================
 
 MAX_PONTOS = {
-    "Prova 1": 40,
-    "Prova 2": 30,
-    "Avaliação interna (IA)": 28,
+    "Paper 1": 40,
+    "Paper 2": 30,
+    "Internal Assessment (IA)": 28,
     "Nota final": 100,
 }
 
@@ -98,10 +95,9 @@ def arredondar_metade_para_cima(valor):
 
 def identificar_nota_ib(componente, pontos):
     """
-    Identifica a nota IB com base nas faixas BSS.
+    Identifica a nota IB com base nas boundaries de BSS.
     """
     for minimo, maximo, nota_ib in LIMITES[componente]:
-
         if minimo <= pontos <= maximo:
             return nota_ib, minimo, maximo
 
@@ -117,27 +113,20 @@ def converter_para_pasb(
     maximo
 ):
     """
-    Calcula a nota PASB proporcionalmente dentro
-    da faixa correspondente à nota IB.
-
-    A interpolação é um método adotado nesta ferramenta.
+    Converte a pontuação para a escala PASB
+    usando interpolação linear dentro da faixa IB.
     """
 
     pasb_min, pasb_max = FAIXAS_PASB[nota_ib]
 
     if maximo > minimo:
         posicao = (
-            pontos - minimo
-        ) / (
-            maximo - minimo
+            (pontos - minimo) / (maximo - minimo)
         )
     else:
         posicao = 0
 
-    posicao = max(
-        0.0,
-        min(1.0, posicao)
-    )
+    posicao = max(0.0, min(1.0, posicao))
 
     nota_pasb = (
         pasb_min
@@ -154,7 +143,7 @@ def exibir_resultado(
     pontos_para_faixa
 ):
     """
-    Exibe o resultado completo da conversão.
+    Exibe o resultado da conversão IB para PASB.
     """
 
     nota_ib, minimo, maximo = identificar_nota_ib(
@@ -197,10 +186,10 @@ def exibir_resultado(
 
     st.markdown(
         f"""
-**Pontuação equivalente no componente:** 
+**Pontuação equivalente no componente:**
 {pontos_equivalentes:.2f}/{MAX_PONTOS[componente]}
 
-**Pontuação inteira considerada:** 
+**Pontuação inteira considerada:**
 {pontos_para_faixa}/{MAX_PONTOS[componente]}
 
 **Faixa de pontos BSS:** {minimo}–{maximo}
@@ -225,14 +214,14 @@ def exibir_resultado(
 st.markdown("""
 <style>
 
-/* Largura do conteúdo */
+/* Largura da página */
 
 .block-container {
     max-width: 850px;
     padding-top: 2rem;
 }
 
-/* Cabeçalho principal */
+/* Cabeçalho */
 
 .bss-hero {
     background: linear-gradient(
@@ -252,7 +241,7 @@ st.markdown("""
         0 8px 24px rgba(88, 28, 36, 0.20);
 }
 
-/* Texto pequeno acima do título */
+/* Texto superior */
 
 .bss-hero .eyebrow {
     font-size: 0.76rem;
@@ -261,7 +250,7 @@ st.markdown("""
     color: #FFD9DD !important;
 }
 
-/* Título principal */
+/* Título */
 
 .bss-hero .heading {
     font-size: clamp(1.75rem, 4vw, 2.5rem);
@@ -281,7 +270,7 @@ st.markdown("""
     font-size: 1rem;
 }
 
-/* Etiquetas do cabeçalho */
+/* Etiquetas */
 
 .bss-tag {
     display: inline-block;
@@ -307,7 +296,6 @@ div.stButton > button[kind="primary"] {
     color: #FFFFFF !important;
     border: 1px solid #8E2937 !important;
     border-radius: 10px !important;
-
     font-weight: 650 !important;
 }
 
@@ -317,7 +305,7 @@ div.stButton > button[kind="primary"]:hover {
     color: #FFFFFF !important;
 }
 
-/* Foco dos campos de entrada */
+/* Campos */
 
 div[data-baseweb="input"]:focus-within {
     border-color: #B44452 !important;
@@ -343,7 +331,7 @@ div[data-baseweb="input"]:focus-within {
 
 st.markdown("""
 <div class="bss-hero">
-<div class="eyebrow">PASB · ESTUDOS SOCIAIS BRASILEIROS · FERRAMENTA DE AVALIAÇÃO</div>
+<div class="eyebrow">PASB · BRAZILIAN SOCIAL STUDIES · FERRAMENTA DE AVALIAÇÃO</div>
 <div class="heading">Conversor de Notas<br>Brazilian Social Studies</div>
 <div class="desc">Converta a pontuação de uma avaliação de BSS em nota IB e seu equivalente na escala percentual da PASB.</div>
 <span class="bss-tag">Nível SL</span>
@@ -362,7 +350,8 @@ st.info(
     "Informe os pontos obtidos pelo aluno e o total de pontos "
     "da atividade. O sistema calcula o percentual alcançado "
     "e converte esse resultado para uma pontuação equivalente "
-    "ao componente de Brazilian Social Studies selecionado. "
+    "ao componente selecionado: Paper 1, Paper 2 ou "
+    "Internal Assessment (IA). "
     "Em seguida, identifica a nota IB (1 a 7) utilizando "
     "as faixas de avaliação de maio de 2026 e calcula "
     "a nota correspondente na escala percentual da PASB. "
@@ -403,9 +392,9 @@ if modo == "Avaliação individual":
     componente = st.selectbox(
         "Componente de BSS",
         [
-            "Prova 1",
-            "Prova 2",
-            "Avaliação interna (IA)"
+            "Paper 1",
+            "Paper 2",
+            "Internal Assessment (IA)"
         ]
     )
 
@@ -449,27 +438,25 @@ if modo == "Avaliação individual":
 
         else:
 
-            # Calcula percentual bruto
+            # Percentual da atividade
 
             percentual = (
                 100 * obtidos / possiveis
             )
 
-            # Converte para o total do componente BSS
+            # Pontuação equivalente no componente BSS
 
             equivalente = (
                 MAX_PONTOS[componente]
                 * obtidos / possiveis
             )
 
-            # Arredonda para aplicar as faixas inteiras IB
+            # Arredondamento para boundaries inteiras
 
             pontos_para_faixa = min(
                 MAX_PONTOS[componente],
                 arredondar_metade_para_cima(equivalente)
             )
-
-            # Mostra resultado
 
             exibir_resultado(
                 componente,
@@ -546,9 +533,11 @@ with st.expander(
 
         linhas.append({
             "Nota IB": nota_ib,
-            "Prova 1 (/40)": faixa("Prova 1"),
-            "Prova 2 (/30)": faixa("Prova 2"),
-            "IA (/28)": faixa("Avaliação interna (IA)"),
+            "Paper 1 (/40)": faixa("Paper 1"),
+            "Paper 2 (/30)": faixa("Paper 2"),
+            "Internal Assessment (/28)": faixa(
+                "Internal Assessment (IA)"
+            ),
             "Nota final (%)": faixa("Nota final"),
             "PASB (%)": (
                 f"{FAIXAS_PASB[nota_ib][0]}–"
