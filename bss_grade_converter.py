@@ -1,6 +1,7 @@
 
 import math
 import streamlit as st
+import pandas as pd
 
 # ============================================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -13,7 +14,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# BOUNDARIES BSS - SL - MAY 2026 - TZ2
+# BOUNDARIES - BSS SL - MAY 2026 - TZ2
 # ============================================================
 
 LIMITES = {
@@ -81,28 +82,35 @@ FAIXAS_PASB = {
 }
 
 # ============================================================
-# FUNÇÕES DE CÁLCULO
+# ESTADO DA SESSÃO
+# ============================================================
+
+if "registros_alunos" not in st.session_state:
+    st.session_state.registros_alunos = []
+
+if "ultimo_resultado" not in st.session_state:
+    st.session_state.ultimo_resultado = None
+
+
+# ============================================================
+# FUNÇÕES
 # ============================================================
 
 def arredondar_metade_para_cima(valor):
-    """
-    Arredondamento tradicional:
-    92.4 -> 92
-    92.5 -> 93
-    """
     return math.floor(valor + 0.5)
 
 
 def identificar_nota_ib(componente, pontos):
     """
-    Identifica a nota IB com base nas boundaries de BSS.
+    Identifica o IB Grade a partir das boundaries BSS.
     """
+
     for minimo, maximo, nota_ib in LIMITES[componente]:
         if minimo <= pontos <= maximo:
             return nota_ib, minimo, maximo
 
     raise ValueError(
-        "Não foi encontrada uma faixa de notas correspondente."
+        "Não foi encontrada uma faixa de nota IB."
     )
 
 
@@ -113,45 +121,64 @@ def converter_para_pasb(
     maximo
 ):
     """
-    Converte a pontuação para a escala PASB
-    usando interpolação linear dentro da faixa IB.
+    Interpolação linear dentro da faixa PASB correspondente.
     """
 
     pasb_min, pasb_max = FAIXAS_PASB[nota_ib]
 
     if maximo > minimo:
-        posicao = (
-            (pontos - minimo) / (maximo - minimo)
-        )
+        posicao = (pontos - minimo) / (maximo - minimo)
     else:
         posicao = 0
 
     posicao = max(0.0, min(1.0, posicao))
 
-    nota_pasb = (
+    return (
         pasb_min
         + posicao * (pasb_max - pasb_min)
     )
 
-    return nota_pasb
 
-
-def exibir_resultado(
+def calcular_resultado(
+    nome,
     componente,
-    percentual,
-    pontos_equivalentes,
-    pontos_para_faixa
+    obtidos,
+    possiveis
 ):
     """
-    Exibe o resultado da conversão IB para PASB.
+    Converte os marks da atividade em resultado IB/PASB.
     """
+
+    if possiveis <= 0:
+        raise ValueError(
+            "O total de marks precisa ser maior que zero."
+        )
+
+    if obtidos < 0 or obtidos > possiveis:
+        raise ValueError(
+            "Os marks obtidos devem estar entre zero "
+            "e o total possível."
+        )
+
+    percentual = 100 * obtidos / possiveis
+
+    equivalente = (
+        MAX_PONTOS[componente]
+        * obtidos
+        / possiveis
+    )
+
+    pontos_para_faixa = min(
+        MAX_PONTOS[componente],
+        arredondar_metade_para_cima(equivalente)
+    )
 
     nota_ib, minimo, maximo = identificar_nota_ib(
         componente,
         pontos_para_faixa
     )
 
-    nota_pasb = converter_para_pasb(
+    nota_pasb_exata = converter_para_pasb(
         pontos_para_faixa,
         nota_ib,
         minimo,
@@ -160,50 +187,68 @@ def exibir_resultado(
 
     pasb_min, pasb_max = FAIXAS_PASB[nota_ib]
 
-    st.divider()
+    return {
+        "Aluno": nome,
+        "Componente": componente,
+        "Marks": f"{obtidos:g}/{possiveis:g}",
+        "Porcentagem (%)": round(percentual, 2),
+        "Marks equivalentes": (
+            f"{pontos_para_faixa}/{MAX_PONTOS[componente]}"
+        ),
+        "IB Grade": nota_ib,
+        "IB Boundaries": (
+            f"{minimo}–{maximo} "
+            f"/{MAX_PONTOS[componente]}"
+        ),
+        "PASB Grade": arredondar_metade_para_cima(
+            nota_pasb_exata
+        ),
+        "Faixa PASB": f"{pasb_min}–{pasb_max}",
+        "PASB exata": round(nota_pasb_exata, 2),
+    }
 
+
+def mostrar_resultado(resultado):
+
+    st.divider()
     st.subheader("Resultado da conversão")
 
-    coluna_a, coluna_b, coluna_c = st.columns(3)
+    c1, c2, c3 = st.columns(3)
 
-    with coluna_a:
+    with c1:
         st.metric(
-            "Percentual obtido",
-            f"{percentual:.2f}%"
+            "Porcentagem",
+            f"{resultado['Porcentagem (%)']:.2f}%"
         )
 
-    with coluna_b:
+    with c2:
         st.metric(
-            "Nota IB",
-            str(nota_ib)
+            "IB Grade",
+            resultado["IB Grade"]
         )
 
-    with coluna_c:
+    with c3:
         st.metric(
-            "Nota PASB",
-            str(arredondar_metade_para_cima(nota_pasb))
+            "PASB Grade",
+            resultado["PASB Grade"]
         )
 
     st.markdown(
         f"""
-**Pontuação equivalente no componente:**
-{pontos_equivalentes:.2f}/{MAX_PONTOS[componente]}
+**Aluno:** {resultado['Aluno']}
 
-**Pontuação inteira considerada:**
-{pontos_para_faixa}/{MAX_PONTOS[componente]}
+**Componente:** {resultado['Componente']}
 
-**Faixa de pontos BSS:** {minimo}–{maximo}
+**Marks obtidos:** {resultado['Marks']}
 
-**Faixa de nota PASB:** {pasb_min}–{pasb_max}
+**Marks equivalentes:** {resultado['Marks equivalentes']}
 
-**Nota PASB calculada (sem arredondar):** {nota_pasb:.2f}
+**IB Boundaries:** {resultado['IB Boundaries']}
+
+**Faixa PASB:** {resultado['Faixa PASB']}
+
+**Nota PASB exata:** {resultado['PASB exata']:.2f}
 """
-    )
-
-    st.caption(
-        "A nota específica dentro da faixa PASB é calculada "
-        "por interpolação linear. A escala da escola informa "
-        "as faixas, mas não determina essa fórmula de conversão."
     )
 
 
@@ -214,14 +259,10 @@ def exibir_resultado(
 st.markdown("""
 <style>
 
-/* Largura da página */
-
 .block-container {
-    max-width: 850px;
+    max-width: 950px;
     padding-top: 2rem;
 }
-
-/* Cabeçalho */
 
 .bss-hero {
     background: linear-gradient(
@@ -235,13 +276,9 @@ st.markdown("""
     border-radius: 20px;
     margin-bottom: 24px;
 
-    color: #FFFFFF !important;
-
     box-shadow:
         0 8px 24px rgba(88, 28, 36, 0.20);
 }
-
-/* Texto superior */
 
 .bss-hero .eyebrow {
     font-size: 0.76rem;
@@ -250,19 +287,14 @@ st.markdown("""
     color: #FFD9DD !important;
 }
 
-/* Título */
-
 .bss-hero .heading {
     font-size: clamp(1.75rem, 4vw, 2.5rem);
     font-weight: 750;
     line-height: 1.16;
 
     margin: 12px 0;
-
     color: #FFFFFF !important;
 }
-
-/* Subtítulo */
 
 .bss-hero .desc {
     color: #FFE9EC !important;
@@ -270,11 +302,8 @@ st.markdown("""
     font-size: 1rem;
 }
 
-/* Etiquetas */
-
 .bss-tag {
     display: inline-block;
-
     margin: 13px 8px 0 0;
     padding: 6px 12px;
 
@@ -285,11 +314,8 @@ st.markdown("""
 
     font-size: 0.76rem;
     font-weight: 600;
-
     color: #FFFFFF !important;
 }
-
-/* Botão principal */
 
 div.stButton > button[kind="primary"] {
     background-color: #8E2937 !important;
@@ -305,18 +331,9 @@ div.stButton > button[kind="primary"]:hover {
     color: #FFFFFF !important;
 }
 
-/* Campos */
-
-div[data-baseweb="input"]:focus-within {
-    border-color: #B44452 !important;
-}
-
-/* Rodapé */
-
 .bss-footer {
     text-align: center;
     color: #A78187;
-
     font-size: 0.82rem;
     padding: 14px 0 6px;
 }
@@ -333,7 +350,7 @@ st.markdown("""
 <div class="bss-hero">
 <div class="eyebrow">PASB · BRAZILIAN SOCIAL STUDIES · FERRAMENTA DE AVALIAÇÃO</div>
 <div class="heading">Conversor de Notas<br>Brazilian Social Studies</div>
-<div class="desc">Converta a pontuação de uma avaliação de BSS em nota IB e seu equivalente na escala percentual da PASB.</div>
+<div class="desc">Converta os marks de avaliações de BSS em notas IB e PASB e organize os resultados dos alunos em uma tabela.</div>
 <span class="bss-tag">Nível SL</span>
 <span class="bss-tag">Maio de 2026 · TZ2</span>
 <span class="bss-tag">IB → PASB</span>
@@ -342,31 +359,28 @@ st.markdown("""
 
 
 # ============================================================
-# EXPLICAÇÃO DA CALCULADORA
+# INFORMAÇÕES
 # ============================================================
 
 st.info(
     "**Como funciona a calculadora:** "
-    "Informe os pontos obtidos pelo aluno e o total de pontos "
-    "da atividade. O sistema calcula o percentual alcançado "
-    "e converte esse resultado para uma pontuação equivalente "
-    "ao componente selecionado: Paper 1, Paper 2 ou "
-    "Internal Assessment (IA). "
-    "Em seguida, identifica a nota IB (1 a 7) utilizando "
-    "as faixas de avaliação de maio de 2026 e calcula "
-    "a nota correspondente na escala percentual da PASB. "
-    "O valor dentro da faixa PASB é estimado proporcionalmente.\n\n"
-
-    "**Referência utilizada:** "
-    "Brazilian Social Studies – SL, maio de 2026, TZ2. "
-    "As faixas HL não estão disponíveis nesta referência. "
-    "Para a nota final geral, deve ser informado um percentual "
-    "já ponderado, pois os pesos dos componentes não foram fornecidos."
+    "Informe o nome do aluno, o componente da avaliação, "
+    "os marks obtidos e o total possível. "
+    "A calculadora transforma o resultado em uma porcentagem, "
+    "converte proporcionalmente para a pontuação do componente "
+    "BSS e identifica o IB Grade utilizando as boundaries "
+    "de maio de 2026 (SL, TZ2). "
+    "Em seguida, calcula o equivalente na escala PASB. "
+    "Você pode adicionar os resultados à tabela e "
+    "exportá-los para o Excel.\n\n"
+    "**Observação:** As boundaries são de BSS SL. "
+    "O valor exato da nota PASB é calculado por "
+    "interpolação linear dentro da faixa correspondente."
 )
 
 
 # ============================================================
-# CONFIGURAÇÃO DO CÁLCULO
+# CONFIGURAÇÃO
 # ============================================================
 
 st.subheader("Configuração da avaliação")
@@ -380,14 +394,18 @@ modo = st.radio(
     horizontal=True
 )
 
-
 # ============================================================
-# MODO: AVALIAÇÃO INDIVIDUAL
+# AVALIAÇÃO INDIVIDUAL
 # ============================================================
 
 if modo == "Avaliação individual":
 
     st.divider()
+
+    nome = st.text_input(
+        "Nome do aluno",
+        placeholder="Digite o nome do aluno"
+    )
 
     componente = st.selectbox(
         "Componente de BSS",
@@ -400,86 +418,78 @@ if modo == "Avaliação individual":
 
     st.caption(
         f"Pontuação máxima de referência: "
-        f"{MAX_PONTOS[componente]} pontos"
+        f"{MAX_PONTOS[componente]} marks."
     )
 
-    coluna_1, coluna_2 = st.columns(2)
+    col1, col2 = st.columns(2)
 
-    with coluna_1:
-
+    with col1:
         obtidos = st.number_input(
-            "Pontos obtidos pelo aluno",
+            "Marks obtidos pelo aluno",
             min_value=0.0,
             step=0.5,
             value=0.0
         )
 
-    with coluna_2:
-
+    with col2:
         possiveis = st.number_input(
-            "Total de pontos da atividade",
+            "Total de marks da avaliação",
             min_value=0.5,
             step=0.5,
             value=float(MAX_PONTOS[componente])
         )
 
     if st.button(
-        "Calcular conversão",
+        "Calcular e adicionar aluno",
         type="primary",
         use_container_width=True
     ):
 
-        if obtidos > possiveis:
-
+        if not nome.strip():
             st.error(
-                "Os pontos obtidos não podem ultrapassar "
-                "o total de pontos da atividade."
+                "Informe o nome do aluno antes de calcular."
             )
 
         else:
+            try:
+                resultado = calcular_resultado(
+                    nome.strip(),
+                    componente,
+                    obtidos,
+                    possiveis
+                )
 
-            # Percentual da atividade
+                st.session_state.registros_alunos.append(
+                    resultado
+                )
 
-            percentual = (
-                100 * obtidos / possiveis
-            )
+                st.session_state.ultimo_resultado = resultado
 
-            # Pontuação equivalente no componente BSS
+                st.success(
+                    f"Resultado de {nome.strip()} "
+                    "adicionado à tabela!"
+                )
 
-            equivalente = (
-                MAX_PONTOS[componente]
-                * obtidos / possiveis
-            )
-
-            # Arredondamento para boundaries inteiras
-
-            pontos_para_faixa = min(
-                MAX_PONTOS[componente],
-                arredondar_metade_para_cima(equivalente)
-            )
-
-            exibir_resultado(
-                componente,
-                percentual,
-                equivalente,
-                pontos_para_faixa
-            )
+            except ValueError as erro:
+                st.error(str(erro))
 
 
 # ============================================================
-# MODO: NOTA FINAL GERAL
+# NOTA FINAL GERAL
 # ============================================================
 
 else:
 
     st.divider()
 
-    st.subheader("Cálculo da nota final")
+    nome = st.text_input(
+        "Nome do aluno",
+        placeholder="Digite o nome do aluno"
+    )
 
     st.caption(
-        "Informe o percentual final já ponderado, "
-        "entre 0 e 100%. A referência fornecida não "
-        "informa os pesos de cada componente."
+        "Informe o percentual final já ponderado. "
+        "Os pesos de cada componente não foram fornecidos."
     )
 
     percentual = st.number_input(
@@ -491,30 +501,134 @@ else:
     )
 
     if st.button(
-        "Calcular nota final",
+        "Calcular e adicionar aluno",
         type="primary",
         use_container_width=True
     ):
 
-        pontos_para_faixa = min(
-            100,
-            arredondar_metade_para_cima(percentual)
-        )
+        if not nome.strip():
+            st.error(
+                "Informe o nome do aluno antes de calcular."
+            )
 
-        exibir_resultado(
-            "Nota final",
-            percentual,
-            percentual,
-            pontos_para_faixa
-        )
+        else:
+            resultado = calcular_resultado(
+                nome.strip(),
+                "Nota final",
+                percentual,
+                100.0
+            )
+
+            st.session_state.registros_alunos.append(
+                resultado
+            )
+
+            st.session_state.ultimo_resultado = resultado
+
+            st.success(
+                f"Nota final de {nome.strip()} "
+                "adicionada à tabela!"
+            )
 
 
 # ============================================================
-# TABELA DE REFERÊNCIA
+# ÚLTIMO RESULTADO
+# ============================================================
+
+if st.session_state.ultimo_resultado is not None:
+
+    mostrar_resultado(
+        st.session_state.ultimo_resultado
+    )
+
+
+# ============================================================
+# TABELA DE ALUNOS
+# ============================================================
+
+st.divider()
+
+st.subheader("Tabela de notas dos alunos")
+
+if st.session_state.registros_alunos:
+
+    df = pd.DataFrame(
+        st.session_state.registros_alunos
+    )
+
+    st.dataframe(
+        df,
+        hide_index=True,
+        use_container_width=True
+    )
+
+    st.caption(
+        f"Total de registros: {len(df)}"
+    )
+
+    # --------------------------------------------------------
+    # DOWNLOAD CSV
+    # --------------------------------------------------------
+
+    csv = df.to_csv(
+        index=False,
+        sep=";",
+        decimal=","
+    ).encode("utf-8-sig")
+
+    st.download_button(
+        label="Baixar tabela para Excel (CSV)",
+        data=csv,
+        file_name="bss_notas_alunos.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
+    # --------------------------------------------------------
+    # REMOVER OU LIMPAR
+    # --------------------------------------------------------
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button(
+            "Remover último registro",
+            use_container_width=True
+        ):
+
+            st.session_state.registros_alunos.pop()
+
+            st.session_state.ultimo_resultado = None
+
+            st.rerun()
+
+    with col2:
+        if st.button(
+            "Limpar toda a tabela",
+            use_container_width=True
+        ):
+
+            st.session_state.registros_alunos = []
+
+            st.session_state.ultimo_resultado = None
+
+            st.rerun()
+
+else:
+
+    st.info(
+        "Nenhum aluno registrado ainda. "
+        "Preencha os campos acima e clique em "
+        "'Calcular e adicionar aluno'."
+    )
+
+
+# ============================================================
+# TABELA DE BOUNDARIES
 # ============================================================
 
 with st.expander(
-    "Consultar tabela de faixas de notas BSS"
+    "Consultar tabela de IB Boundaries BSS"
 ):
 
     linhas = []
@@ -532,7 +646,7 @@ with st.expander(
             return f"{minimo}–{maximo}"
 
         linhas.append({
-            "Nota IB": nota_ib,
+            "IB Grade": nota_ib,
             "Paper 1 (/40)": faixa("Paper 1"),
             "Paper 2 (/30)": faixa("Paper 2"),
             "Internal Assessment (/28)": faixa(
@@ -553,29 +667,24 @@ with st.expander(
 
 
 # ============================================================
-# OBSERVAÇÃO SOBRE A ESCALA PASB
+# AVISO SOBRE O ARMAZENAMENTO
 # ============================================================
 
-st.caption(
-    "Observação: a tabela PASB apresenta a nota IB 1 "
-    "como 0–50 e a nota IB 2 como 50–59, com sobreposição "
-    "no valor 50. A classificação IB é definida antes "
-    "da conversão, portanto essa sobreposição não afeta "
-    "a identificação da nota IB."
+st.warning(
+    "Os registros são mantidos apenas durante esta sessão "
+    "do Streamlit. Baixe a tabela em CSV antes de encerrar "
+    "a sessão para não perder os resultados."
 )
 
 
 # ============================================================
-# RODAPÉ E COPYRIGHT
+# COPYRIGHT
 # ============================================================
 
 st.divider()
 
-st.markdown(
-    """
+st.markdown("""
 <div class="bss-footer">
 © 2026 Gracielle Dias. Todos os direitos reservados.
 </div>
-""",
-    unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
